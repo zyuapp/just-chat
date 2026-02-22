@@ -4,6 +4,8 @@ import { stdin as input, stdout as output } from "node:process";
 import { Ollama, type Message } from "ollama";
 import { z } from "zod";
 
+const EXIT_COMMANDS = new Set(["exit", "quit"]);
+
 const envSchema = z.object({
   OLLAMA_API_KEY: z.string().min(1, "OLLAMA_API_KEY is required"),
   OLLAMA_MODEL: z.string().min(1, "OLLAMA_MODEL is required"),
@@ -40,23 +42,11 @@ const history: Message[] = [
   }
 ];
 
-const repl = createInterface({ input, output });
+function isExitCommand(userInput: string): boolean {
+  return EXIT_COMMANDS.has(userInput.toLowerCase());
+}
 
-output.write("Local agent REPL ready. Type 'exit' to quit.\n\n");
-
-while (true) {
-  const userInput = (await repl.question("You: ")).trim();
-
-  if (userInput.length === 0) {
-    continue;
-  }
-
-  if (userInput.toLowerCase() === "exit" || userInput.toLowerCase() === "quit") {
-    output.write("Bye.\n");
-    repl.close();
-    process.exit(0);
-  }
-
+async function handleUserMessage(userInput: string): Promise<void> {
   history.push({ role: "user", content: userInput });
 
   try {
@@ -74,3 +64,27 @@ while (true) {
     output.write(`Agent error: ${message}\n\n`);
   }
 }
+
+async function runRepl(): Promise<void> {
+  const repl = createInterface({ input, output });
+
+  output.write("Local agent REPL ready. Type 'exit' to quit.\n\n");
+
+  while (true) {
+    const userInput = (await repl.question("You: ")).trim();
+
+    if (userInput.length === 0) {
+      continue;
+    }
+
+    if (isExitCommand(userInput)) {
+      output.write("Bye.\n");
+      repl.close();
+      break;
+    }
+
+    await handleUserMessage(userInput);
+  }
+}
+
+await runRepl();
