@@ -40,7 +40,7 @@ describe("executeRunCommandToolCall", () => {
     expect(mockedExecaCommand).not.toHaveBeenCalled();
   });
 
-  it("executes approved command with defaults", async () => {
+  it("executes command with defaults", async () => {
     mockedExecaCommand.mockResolvedValue({
       exitCode: 0,
       stdout: "/tmp",

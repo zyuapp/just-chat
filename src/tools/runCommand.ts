@@ -1,12 +1,12 @@
 import { execaCommand } from "execa";
 import type { Tool, ToolCall } from "ollama";
 import { z } from "zod";
+import { DEFAULT_MAX_TEXT_CHARS, getErrorMessage, truncateText } from "./common.js";
 
 export const RUN_COMMAND_TOOL_NAME = "run_command";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 10_000;
 const MAX_COMMAND_TIMEOUT_MS = 20_000;
-const MAX_TOOL_OUTPUT_CHARS = 4_000;
 
 const runCommandInputSchema = z.object({
   command: z.string().trim().min(1, "command is required"),
@@ -55,21 +55,6 @@ export const runCommandTool: Tool = {
   }
 };
 
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unknown error";
-}
-
-function truncateText(text: string, maxChars: number): { value: string; truncated: boolean } {
-  if (text.length <= maxChars) {
-    return { value: text, truncated: false };
-  }
-
-  return {
-    value: `${text.slice(0, maxChars)}\n...<truncated>`,
-    truncated: true
-  };
-}
-
 function parseRunCommandInput(toolCall: ToolCall): RunCommandInput {
   const parsed = runCommandInputSchema.safeParse(toolCall.function.arguments);
 
@@ -92,8 +77,8 @@ async function executeRunCommand(inputData: RunCommandInput): Promise<RunCommand
       shell: true
     });
 
-    const cappedStdout = truncateText(commandResult.stdout ?? "", MAX_TOOL_OUTPUT_CHARS);
-    const cappedStderr = truncateText(commandResult.stderr ?? "", MAX_TOOL_OUTPUT_CHARS);
+    const cappedStdout = truncateText(commandResult.stdout ?? "", DEFAULT_MAX_TEXT_CHARS);
+    const cappedStderr = truncateText(commandResult.stderr ?? "", DEFAULT_MAX_TEXT_CHARS);
 
     return {
       ok: commandResult.exitCode === 0,

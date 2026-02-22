@@ -5,7 +5,7 @@ import { createInitialHistory } from "./agent/history.js";
 import { handleUserMessage } from "./agent/loop.js";
 import { getEnv } from "./config/env.js";
 import { runRepl } from "./repl/repl.js";
-import { executeRunCommandToolCall, runCommandTool } from "./tools/runCommand.js";
+import { allTools, executeToolCall } from "./tools/registry.js";
 
 async function main(): Promise<void> {
   const env = getEnv();
@@ -26,8 +26,8 @@ async function main(): Promise<void> {
         model: env.OLLAMA_MODEL,
         history,
         userInput,
-        tools: [runCommandTool],
-        executeToolCall: (toolCall) => executeRunCommandToolCall(toolCall)
+        tools: allTools,
+        executeToolCall
       })
   });
 }
