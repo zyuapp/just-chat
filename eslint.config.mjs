@@ -15,5 +15,28 @@ export default tseslint.config(
         ...globals.node
       }
     }
+  },
+  {
+    files: ["src/**/*.ts"],
+    rules: {
+      complexity: ["error", 8],
+      "max-lines": [
+        "error",
+        {
+          max: 300,
+          skipBlankLines: true,
+          skipComments: true
+        }
+      ],
+      "max-lines-per-function": [
+        "error",
+        {
+          max: 80,
+          skipBlankLines: true,
+          skipComments: true,
+          IIFEs: true
+        }
+      ]
+    }
   }
 );
