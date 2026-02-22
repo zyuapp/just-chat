@@ -21,12 +21,16 @@ afterEach(async () => {
 });
 
 describe("tool registry", () => {
-  it("executes pwd tool", async () => {
+  it("returns success envelope for pwd", async () => {
     const result = await executeToolCall(makeToolCall("pwd", {}));
-    const typed = result as { ok: boolean; cwd?: string };
 
-    expect(typed.ok).toBe(true);
-    expect(typed.cwd).toBe(WORKSPACE_ROOT);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("Expected success envelope");
+    }
+
+    expect(result.tool).toBe("pwd");
+    expect((result.data as { cwd: string }).cwd).toBe(WORKSPACE_ROOT);
   });
 
   it("writes and reads a sandbox file", async () => {
@@ -36,48 +40,59 @@ describe("tool registry", () => {
         content: "hello tools"
       })
     );
-    const typedWrite = writeResult as { ok: boolean; path?: string };
 
-    expect(typedWrite.ok).toBe(true);
-    expect(typedWrite.path).toBe("sandbox/test-temp/note.txt");
+    expect(writeResult.ok).toBe(true);
+    if (!writeResult.ok) {
+      throw new Error("Expected write_file success envelope");
+    }
+
+    const writeData = writeResult.data as { path: string };
+    expect(writeData.path).toBe("sandbox/test-temp/note.txt");
 
     const readResult = await executeToolCall(
       makeToolCall("read_file", {
         path: "sandbox/test-temp/note.txt"
       })
     );
-    const typedRead = readResult as {
-      ok: boolean;
-      path?: string;
-      content?: string;
-      truncated?: boolean;
-    };
 
-    expect(typedRead.ok).toBe(true);
-    expect(typedRead.path).toBe("sandbox/test-temp/note.txt");
-    expect(typedRead.content).toBe("hello tools");
-    expect(typedRead.truncated).toBe(false);
+    expect(readResult.ok).toBe(true);
+    if (!readResult.ok) {
+      throw new Error("Expected read_file success envelope");
+    }
+
+    const readData = readResult.data as { path: string; content: string; truncated: boolean };
+    expect(readData.path).toBe("sandbox/test-temp/note.txt");
+    expect(readData.content).toBe("hello tools");
+    expect(readData.truncated).toBe(false);
   });
 
-  it("blocks write_file path traversal outside sandbox", async () => {
+  it("returns standardized error envelope when sandbox path traversal is attempted", async () => {
     const result = await executeToolCall(
       makeToolCall("write_file", {
         path: "../outside.txt",
         content: "blocked"
       })
     );
-    const typed = result as { ok: boolean; error?: string };
 
-    expect(typed.ok).toBe(false);
-    expect(typed.error).toContain("outside sandbox scope");
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected error envelope");
+    }
+
+    expect(result.error.code).toBe("TOOL_RESULT_ERROR");
+    expect(result.error.message).toContain("outside sandbox scope");
   });
 
-  it("returns unsupported tool error for unknown tools", async () => {
+  it("returns unsupported tool error envelope", async () => {
     const result = await executeToolCall(makeToolCall("nope", {}));
-    const typed = result as { ok: boolean; error?: string };
 
-    expect(typed.ok).toBe(false);
-    expect(typed.error).toContain("Unsupported tool");
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected error envelope");
+    }
+
+    expect(result.error.code).toBe("UNSUPPORTED_TOOL");
+    expect(result.error.message).toContain("Unsupported tool");
   });
 
   it("lists files in sandbox directory", async () => {
@@ -93,18 +108,26 @@ describe("tool registry", () => {
         path: "sandbox/test-temp"
       })
     );
-    const typed = result as { ok: boolean; entries?: string[] };
 
-    expect(typed.ok).toBe(true);
-    expect(typed.entries).toContain("ls-check.txt");
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("Expected success envelope");
+    }
+
+    const data = result.data as { entries: string[] };
+    expect(data.entries).toContain("ls-check.txt");
   });
 
-  it("returns git status output", async () => {
+  it("returns git status output in success envelope", async () => {
     const result = await executeToolCall(makeToolCall("git_status", {}));
-    const typed = result as { ok: boolean; output?: string };
 
-    expect(typed.ok).toBe(true);
-    expect(typeof typed.output).toBe("string");
-    expect(typed.output?.length).toBeGreaterThan(0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("Expected success envelope");
+    }
+
+    const data = result.data as { output: string };
+    expect(typeof data.output).toBe("string");
+    expect(data.output.length).toBeGreaterThan(0);
   });
 });

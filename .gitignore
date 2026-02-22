@@ -2,3 +2,4 @@ docs/plan.md
 node_modules/
 dist/
 .env
+data/logs/

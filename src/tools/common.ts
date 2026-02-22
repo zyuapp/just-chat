@@ -8,6 +8,12 @@ export function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
+export function isTransientErrorMessage(message: string): boolean {
+  return /(timeout|timed out|network|temporar|econnreset|econnrefused|429|503|rate limit)/i.test(
+    message
+  );
+}
+
 export function truncateText(text: string, maxChars: number): { value: string; truncated: boolean } {
   if (text.length <= maxChars) {
     return { value: text, truncated: false };

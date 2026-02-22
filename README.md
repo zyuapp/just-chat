@@ -25,4 +25,6 @@ Type `exit` or `quit` to stop.
 - `npm run dev` - start local REPL
 - `npm run typecheck` - TypeScript check
 - `npm run lint` - ESLint
+- `npm run test` - unit tests
+- `npm run debug:runs -- 10` - show recent run summaries from logs
 - `npm run build` - compile to `dist/`

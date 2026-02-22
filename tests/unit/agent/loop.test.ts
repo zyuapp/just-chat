@@ -1,6 +1,8 @@
 import type { ChatResponse, Message, Tool, ToolCall } from "ollama";
+import type { Logger } from "pino";
 import { describe, expect, it, vi } from "vitest";
 import { handleUserMessage, type ChatClient, type ToolExecutor } from "../../../src/agent/loop.js";
+import type { ToolExecutionEnvelope } from "../../../src/tools/registry.js";
 
 function makeToolCall(name: string, args: Record<string, unknown>): ToolCall {
   return {
@@ -31,6 +33,40 @@ function makeClient(chatMock: ChatClient["chat"]): ChatClient {
   return { chat: chatMock };
 }
 
+function makeLogger(): Logger {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn()
+  } as unknown as Logger;
+}
+
+function successEnvelope(tool: string, data: unknown): ToolExecutionEnvelope {
+  return {
+    ok: true,
+    tool,
+    durationMs: 1,
+    data
+  };
+}
+
+function errorEnvelope(tool: string, retryable: boolean, message: string): ToolExecutionEnvelope {
+  return {
+    ok: false,
+    tool,
+    durationMs: 1,
+    error: {
+      code: retryable ? "TOOL_RETRYABLE_ERROR" : "TOOL_RESULT_ERROR",
+      message,
+      retryable
+    }
+  };
+}
+
 describe("handleUserMessage", () => {
   const tools: Tool[] = [
     {
@@ -45,6 +81,7 @@ describe("handleUserMessage", () => {
   ];
 
   it("returns assistant text when no tool calls are needed", async () => {
+    const logger = makeLogger();
     const chat = vi
       .fn<ChatClient["chat"]>()
       .mockResolvedValue(makeChatResponse({ role: "assistant", content: "hello" }));
@@ -53,9 +90,11 @@ describe("handleUserMessage", () => {
 
     const result = await handleUserMessage({
       client: makeClient(chat),
+      logger,
       model: "test-model",
       history,
       userInput: "hi",
+      requestId: "req-1",
       tools,
       executeToolCall
     });
@@ -67,6 +106,7 @@ describe("handleUserMessage", () => {
   });
 
   it("executes a single tool call and returns final assistant response", async () => {
+    const logger = makeLogger();
     const toolCall = makeToolCall("run_command", { command: "pwd" });
     const chat = vi
       .fn<ChatClient["chat"]>()
@@ -74,14 +114,16 @@ describe("handleUserMessage", () => {
         makeChatResponse({ role: "assistant", content: "", tool_calls: [toolCall] })
       )
       .mockResolvedValueOnce(makeChatResponse({ role: "assistant", content: "done" }));
-    const executeToolCall: ToolExecutor = vi.fn().mockResolvedValue({ ok: true, stdout: "/tmp" });
+    const executeToolCall: ToolExecutor = vi.fn().mockResolvedValue(successEnvelope("run_command", { ok: true }));
     const history: Message[] = [{ role: "system", content: "system" }];
 
     const result = await handleUserMessage({
       client: makeClient(chat),
+      logger,
       model: "test-model",
       history,
       userInput: "where are we",
+      requestId: "req-2",
       tools,
       executeToolCall
     });
@@ -93,37 +135,62 @@ describe("handleUserMessage", () => {
     expect(history.some((item) => item.role === "tool")).toBe(true);
   });
 
-  it("executes multiple tool calls from one model response", async () => {
-    const first = makeToolCall("run_command", { command: "pwd" });
-    const second = makeToolCall("run_command", { command: "ls" });
+  it("retries transient model errors and then succeeds", async () => {
+    const logger = makeLogger();
     const chat = vi
       .fn<ChatClient["chat"]>()
-      .mockResolvedValueOnce(
-        makeChatResponse({ role: "assistant", content: "", tool_calls: [first, second] })
-      )
-      .mockResolvedValueOnce(makeChatResponse({ role: "assistant", content: "all done" }));
-    const executeToolCall: ToolExecutor = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: true, stdout: "/tmp" })
-      .mockResolvedValueOnce({ ok: true, stdout: "file1" });
+      .mockRejectedValueOnce(new Error("ECONNRESET"))
+      .mockResolvedValueOnce(makeChatResponse({ role: "assistant", content: "after retry" }));
+    const executeToolCall: ToolExecutor = vi.fn();
     const history: Message[] = [{ role: "system", content: "system" }];
 
     const result = await handleUserMessage({
       client: makeClient(chat),
+      logger,
       model: "test-model",
       history,
-      userInput: "check stuff",
+      userInput: "retry model",
+      requestId: "req-3",
       tools,
       executeToolCall
     });
 
-    expect(result).toEqual({ kind: "success", text: "all done" });
+    expect(result).toEqual({ kind: "success", text: "after retry" });
+    expect(chat).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries transient tool errors and then succeeds", async () => {
+    const logger = makeLogger();
+    const toolCall = makeToolCall("run_command", { command: "pwd" });
+    const chat = vi
+      .fn<ChatClient["chat"]>()
+      .mockResolvedValueOnce(
+        makeChatResponse({ role: "assistant", content: "", tool_calls: [toolCall] })
+      )
+      .mockResolvedValueOnce(makeChatResponse({ role: "assistant", content: "tool done" }));
+    const executeToolCall: ToolExecutor = vi
+      .fn()
+      .mockResolvedValueOnce(errorEnvelope("run_command", true, "temporary timeout"))
+      .mockResolvedValueOnce(successEnvelope("run_command", { ok: true }));
+    const history: Message[] = [{ role: "system", content: "system" }];
+
+    const result = await handleUserMessage({
+      client: makeClient(chat),
+      logger,
+      model: "test-model",
+      history,
+      userInput: "retry tool",
+      requestId: "req-4",
+      tools,
+      executeToolCall
+    });
+
+    expect(result).toEqual({ kind: "success", text: "tool done" });
     expect(executeToolCall).toHaveBeenCalledTimes(2);
-    expect(executeToolCall).toHaveBeenNthCalledWith(1, first);
-    expect(executeToolCall).toHaveBeenNthCalledWith(2, second);
   });
 
   it("falls back after max tool loop steps", async () => {
+    const logger = makeLogger();
     const repeatedToolCall = makeToolCall("run_command", { command: "pwd" });
     const toolResponse = makeChatResponse({
       role: "assistant",
@@ -143,14 +210,18 @@ describe("handleUserMessage", () => {
         makeChatResponse({ role: "assistant", content: "fallback response" })
       );
 
-    const executeToolCall: ToolExecutor = vi.fn().mockResolvedValue({ ok: true });
+    const executeToolCall: ToolExecutor = vi
+      .fn()
+      .mockResolvedValue(successEnvelope("run_command", { ok: true }));
     const history: Message[] = [{ role: "system", content: "system" }];
 
     const result = await handleUserMessage({
       client: makeClient(chat),
+      logger,
       model: "test-model",
       history,
       userInput: "loop",
+      requestId: "req-5",
       tools,
       executeToolCall
     });
@@ -160,16 +231,19 @@ describe("handleUserMessage", () => {
     expect(chat).toHaveBeenCalledTimes(7);
   });
 
-  it("returns error result when model call throws", async () => {
+  it("returns error result when model call keeps failing", async () => {
+    const logger = makeLogger();
     const chat = vi.fn<ChatClient["chat"]>().mockRejectedValue(new Error("network failure"));
     const executeToolCall: ToolExecutor = vi.fn();
     const history: Message[] = [{ role: "system", content: "system" }];
 
     const result = await handleUserMessage({
       client: makeClient(chat),
+      logger,
       model: "test-model",
       history,
       userInput: "hello",
+      requestId: "req-6",
       tools,
       executeToolCall
     });

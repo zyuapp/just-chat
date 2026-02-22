@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
+    "debug:runs": "tsx src/scripts/recentRuns.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -17,6 +18,7 @@
     "dotenv": "^16.4.7",
     "execa": "^9.6.0",
     "ollama": "^0.5.17",
+    "pino": "^9.6.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
