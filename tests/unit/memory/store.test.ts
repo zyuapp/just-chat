@@ -102,4 +102,23 @@ describe("createMemoryStore", () => {
     expect(value.limit).toBe(50);
     store.close();
   });
+
+  it("stores and retrieves memory chunks", () => {
+    const store = createMemoryStore({ dbPath: testDbPath, now: () => 5 });
+    const conversationId = store.getOrCreateConversation("repl", "default");
+
+    store.saveMemoryChunk({
+      conversationId,
+      requestId: "req-3",
+      sourceRole: "user",
+      content: "I prefer npm for package management.",
+      embedding: [0.1, 0.2, 0.3]
+    });
+
+    const chunks = store.listRecentMemoryChunks(conversationId, 10);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].content).toContain("npm");
+    expect(chunks[0].embedding).toEqual([0.1, 0.2, 0.3]);
+    store.close();
+  });
 });

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "debug:runs": "tsx src/scripts/recentRuns.ts",
+    "debug:memory": "tsx src/scripts/debugMemory.ts",
+    "eval:memory": "tsx src/scripts/evalMemory.ts",
     "db:migrate": "tsx src/scripts/migrate.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",

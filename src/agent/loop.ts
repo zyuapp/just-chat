@@ -3,34 +3,20 @@ import type { Logger } from "pino";
 import type { ToolExecutionEnvelope } from "../tools/registry.js";
 import { getErrorMessage, isTransientErrorMessage } from "../tools/common.js";
 import { appendAssistantReply } from "./history.js";
+import type {
+  AgentTurnMeta,
+  AgentTurnResult,
+  ChatClient,
+  OnToolResult,
+  ToolExecutor
+} from "./types.js";
+
+export type { AgentTurnMeta, AgentTurnResult, ChatClient, ToolExecutor };
 
 const MAX_TOOL_LOOP_STEPS = 5;
 const MAX_MODEL_RETRIES = 2;
 const MAX_TOOL_RETRIES = 2;
 const RETRY_DELAY_MS = 150;
-
-export type AgentTurnResult =
-  | {
-      kind: "success";
-      text: string;
-      meta: AgentTurnMeta;
-    }
-  | {
-      kind: "error";
-      text: string;
-      meta: AgentTurnMeta;
-    };
-
-export type ToolExecutor = (toolCall: ToolCall) => Promise<ToolExecutionEnvelope>;
-
-export type ChatClient = {
-  chat: (params: {
-    model: string;
-    messages: Message[];
-    tools?: Tool[];
-    stream: false;
-  }) => Promise<ChatResponse>;
-};
 
 type HandleUserMessageParams = {
   client: ChatClient;
@@ -39,6 +25,7 @@ type HandleUserMessageParams = {
   history: Message[];
   userInput: string;
   requestId: string;
+  contextNote?: string;
   tools: Tool[];
   executeToolCall: ToolExecutor;
   onToolResult?: OnToolResult;
@@ -62,12 +49,6 @@ type TurnStats = {
   toolRetries: number;
   toolErrors: number;
 };
-
-export type AgentTurnMeta = TurnStats & {
-  durationMs: number;
-};
-
-type OnToolResult = (toolCall: ToolCall, envelope: ToolExecutionEnvelope) => Promise<void>;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -163,6 +144,20 @@ function buildErrorTurnResult(
   return { kind: "error", text: message, meta: toTurnMeta(durationMs, stats) };
 }
 
+function buildModelMessages(history: Message[], contextNote?: string): Message[] {
+  if (!contextNote) {
+    return history;
+  }
+
+  return [
+    {
+      role: "system",
+      content: contextNote
+    },
+    ...history
+  ];
+}
+
 async function chatWithRetry(
   client: ChatClient,
   logger: Logger,
@@ -236,6 +231,7 @@ export async function handleUserMessage({
   history,
   userInput,
   requestId,
+  contextNote,
   tools,
   executeToolCall,
   onToolResult
@@ -246,8 +242,10 @@ export async function handleUserMessage({
   logger.info({ event: "turn_started", requestId, inputLength: userInput.length });
   history.push({ role: "user", content: userInput });
 
+  const modelMessages = (): Message[] => buildModelMessages(history, contextNote);
+
   try {
-    let chatResult = await chatWithRetry(client, logger, requestId, model, history, tools);
+    let chatResult = await chatWithRetry(client, logger, requestId, model, modelMessages(), tools);
     trackModelAttempt(stats, chatResult);
     let response = chatResult.response;
 
@@ -271,12 +269,12 @@ export async function handleUserMessage({
         }
       }
 
-      chatResult = await chatWithRetry(client, logger, requestId, model, history, tools);
+      chatResult = await chatWithRetry(client, logger, requestId, model, modelMessages(), tools);
       trackModelAttempt(stats, chatResult);
       response = chatResult.response;
     }
 
-    const fallbackChat = await chatWithRetry(client, logger, requestId, model, history);
+    const fallbackChat = await chatWithRetry(client, logger, requestId, model, modelMessages());
     trackModelAttempt(stats, fallbackChat);
     const fallbackText = appendAssistantReply(history, fallbackChat.response.message);
     return buildSuccessTurnResult(logger, requestId, startedAt, stats, fallbackText);

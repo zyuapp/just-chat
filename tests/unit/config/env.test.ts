@@ -12,6 +12,18 @@ describe("getEnv", () => {
     expect(env.OLLAMA_API_KEY).toBe("test-key");
     expect(env.OLLAMA_MODEL).toBe("gpt-oss:120b");
     expect(env.OLLAMA_HOST).toBe("https://ollama.com");
+    expect(env.OLLAMA_EMBED_MODEL).toBe("gpt-oss:120b");
+  });
+
+  it("uses explicit embed model when provided", () => {
+    const env = getEnv({
+      OLLAMA_API_KEY: "test-key",
+      OLLAMA_MODEL: "gpt-oss:120b",
+      OLLAMA_HOST: "https://ollama.com",
+      OLLAMA_EMBED_MODEL: "nomic-embed-text"
+    });
+
+    expect(env.OLLAMA_EMBED_MODEL).toBe("nomic-embed-text");
   });
 
   it("throws with a clear message when required vars are missing", () => {

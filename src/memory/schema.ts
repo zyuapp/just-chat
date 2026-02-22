@@ -77,10 +77,30 @@ export const settingsTable = sqliteTable("settings", {
   updatedAt: integer("updated_at").notNull()
 });
 
+export const memoryChunksTable = sqliteTable(
+  "memory_chunks",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id").notNull(),
+    requestId: text("request_id").notNull(),
+    sourceRole: text("source_role").notNull(),
+    content: text("content").notNull(),
+    embeddingJson: text("embedding_json").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => ({
+    conversationTimeIdx: index("memory_chunks_conversation_time_idx").on(
+      table.conversationId,
+      table.createdAt
+    )
+  })
+);
+
 export const memorySchema = {
   conversationsTable,
   messagesTable,
   toolRunsTable,
   agentRunsTable,
-  settingsTable
+  settingsTable,
+  memoryChunksTable
 };

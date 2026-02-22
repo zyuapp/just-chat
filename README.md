@@ -14,6 +14,7 @@ Right now, it is a local terminal REPL where I can chat with the model and itera
    - `OLLAMA_API_KEY`
    - `OLLAMA_MODEL`
    - `OLLAMA_HOST`
+   - `OLLAMA_EMBED_MODEL` (optional, defaults to `OLLAMA_MODEL`)
 4. Run:
    - `npm run dev`
 
@@ -28,4 +29,6 @@ Type `exit` or `quit` to stop.
 - `npm run lint` - ESLint
 - `npm run test` - unit tests
 - `npm run debug:runs -- 10` - show recent run summaries from logs
+- `npm run debug:memory -- "query"` - inspect semantic memory hits
+- `npm run eval:memory` - run a basic RAG memory evaluation
 - `npm run build` - compile to `dist/`

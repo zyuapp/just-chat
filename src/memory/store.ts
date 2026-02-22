@@ -4,65 +4,30 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import type { Message, ToolCall } from "ollama";
-import type { ToolExecutionEnvelope } from "../tools/registry.js";
+import type { Message } from "ollama";
 import { ensureDatabaseSchema } from "./bootstrap.js";
 import {
   agentRunsTable,
   conversationsTable,
+  memoryChunksTable,
   memorySchema,
   messagesTable,
   settingsTable,
   toolRunsTable
 } from "./schema.js";
+import type {
+  CreateMemoryStoreOptions,
+  MemoryChunkRecord,
+  MemoryStore,
+  SaveAgentRunInput,
+  SaveMemoryChunkInput,
+  SaveMessageInput,
+  SaveToolRunInput
+} from "./types.js";
+
+export type { MemoryChunkRecord, MemoryStore } from "./types.js";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "app.db");
-
-type MessageRole = "user" | "assistant" | "tool";
-
-type CreateMemoryStoreOptions = {
-  dbPath?: string;
-  now?: () => number;
-};
-
-type SaveMessageInput = {
-  conversationId: string;
-  requestId: string;
-  role: MessageRole;
-  content: string;
-  toolName?: string;
-};
-
-type SaveToolRunInput = {
-  conversationId: string;
-  requestId: string;
-  toolCall: ToolCall;
-  envelope: ToolExecutionEnvelope;
-};
-
-type SaveAgentRunInput = {
-  conversationId: string;
-  requestId: string;
-  status: "success" | "error";
-  durationMs: number;
-  modelCalls: number;
-  modelRetries: number;
-  toolCalls: number;
-  toolRetries: number;
-  toolErrors: number;
-  errorMessage?: string;
-};
-
-export type MemoryStore = {
-  getOrCreateConversation: (channel: string, channelUserId: string) => string;
-  listRecentMessages: (conversationId: string, limit: number) => Message[];
-  saveMessage: (input: SaveMessageInput) => void;
-  saveToolRun: (input: SaveToolRunInput) => void;
-  saveAgentRun: (input: SaveAgentRunInput) => void;
-  setSetting: (key: string, value: unknown) => void;
-  getSetting: (key: string) => unknown | null;
-  close: () => void;
-};
 
 function createDb(sqlite: Database.Database) {
   return drizzle(sqlite, { schema: memorySchema });
@@ -199,6 +164,50 @@ function saveAgentRun(context: MemoryContext, input: SaveAgentRunInput): void {
   touchConversation(context.db, input.conversationId, timestamp);
 }
 
+function saveMemoryChunk(context: MemoryContext, input: SaveMemoryChunkInput): void {
+  const timestamp = context.now();
+
+  context.db.insert(memoryChunksTable)
+    .values({
+      id: randomUUID(),
+      conversationId: input.conversationId,
+      requestId: input.requestId,
+      sourceRole: input.sourceRole,
+      content: input.content,
+      embeddingJson: JSON.stringify(input.embedding),
+      createdAt: timestamp
+    })
+    .run();
+
+  touchConversation(context.db, input.conversationId, timestamp);
+}
+
+function listRecentMemoryChunks(context: MemoryContext, conversationId: string, limit: number): MemoryChunkRecord[] {
+  const rows = context.db
+    .select({
+      id: memoryChunksTable.id,
+      requestId: memoryChunksTable.requestId,
+      sourceRole: memoryChunksTable.sourceRole,
+      content: memoryChunksTable.content,
+      embeddingJson: memoryChunksTable.embeddingJson,
+      createdAt: memoryChunksTable.createdAt
+    })
+    .from(memoryChunksTable)
+    .where(eq(memoryChunksTable.conversationId, conversationId))
+    .orderBy(desc(memoryChunksTable.createdAt))
+    .limit(limit)
+    .all();
+
+  return rows.map((row) => ({
+    id: row.id,
+    requestId: row.requestId,
+    sourceRole: row.sourceRole,
+    content: row.content,
+    embedding: JSON.parse(row.embeddingJson) as number[],
+    createdAt: row.createdAt
+  }));
+}
+
 function setSetting(context: MemoryContext, key: string, value: unknown): void {
   const timestamp = context.now();
 
@@ -247,6 +256,8 @@ export function createMemoryStore(options: CreateMemoryStoreOptions = {}): Memor
     saveMessage: (input) => saveMessage(context, input),
     saveToolRun: (input) => saveToolRun(context, input),
     saveAgentRun: (input) => saveAgentRun(context, input),
+    saveMemoryChunk: (input) => saveMemoryChunk(context, input),
+    listRecentMemoryChunks: (conversationId, limit) => listRecentMemoryChunks(context, conversationId, limit),
     setSetting: (key, value) => setSetting(context, key, value),
     getSetting: (key) => getSetting(context, key),
     close: () => sqlite.close()

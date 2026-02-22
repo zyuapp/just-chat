@@ -3,8 +3,12 @@ import { z } from "zod";
 const envSchema = z.object({
   OLLAMA_API_KEY: z.string().min(1, "OLLAMA_API_KEY is required"),
   OLLAMA_MODEL: z.string().min(1, "OLLAMA_MODEL is required"),
-  OLLAMA_HOST: z.string().url("OLLAMA_HOST must be a valid URL")
-});
+  OLLAMA_HOST: z.string().url("OLLAMA_HOST must be a valid URL"),
+  OLLAMA_EMBED_MODEL: z.string().min(1).optional()
+}).transform((value) => ({
+  ...value,
+  OLLAMA_EMBED_MODEL: value.OLLAMA_EMBED_MODEL ?? value.OLLAMA_MODEL
+}));
 
 export type AppEnv = z.infer<typeof envSchema>;
 
