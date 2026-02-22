@@ -67,6 +67,22 @@ function errorEnvelope(tool: string, retryable: boolean, message: string): ToolE
   };
 }
 
+function expectMeta(meta: {
+  durationMs: number;
+  modelCalls: number;
+  modelRetries: number;
+  toolCalls: number;
+  toolRetries: number;
+  toolErrors: number;
+}): void {
+  expect(meta.durationMs).toBeGreaterThanOrEqual(0);
+  expect(meta.modelCalls).toBeGreaterThanOrEqual(0);
+  expect(meta.modelRetries).toBeGreaterThanOrEqual(0);
+  expect(meta.toolCalls).toBeGreaterThanOrEqual(0);
+  expect(meta.toolRetries).toBeGreaterThanOrEqual(0);
+  expect(meta.toolErrors).toBeGreaterThanOrEqual(0);
+}
+
 describe("handleUserMessage", () => {
   const tools: Tool[] = [
     {
@@ -99,7 +115,12 @@ describe("handleUserMessage", () => {
       executeToolCall
     });
 
-    expect(result).toEqual({ kind: "success", text: "hello" });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected success result");
+    }
+    expect(result.text).toBe("hello");
+    expectMeta(result.meta);
     expect(executeToolCall).not.toHaveBeenCalled();
     expect(chat).toHaveBeenCalledTimes(1);
     expect(history.at(-1)).toEqual({ role: "assistant", content: "hello" });
@@ -128,7 +149,12 @@ describe("handleUserMessage", () => {
       executeToolCall
     });
 
-    expect(result).toEqual({ kind: "success", text: "done" });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected success result");
+    }
+    expect(result.text).toBe("done");
+    expectMeta(result.meta);
     expect(executeToolCall).toHaveBeenCalledTimes(1);
     expect(executeToolCall).toHaveBeenCalledWith(toolCall);
     expect(chat).toHaveBeenCalledTimes(2);
@@ -155,7 +181,12 @@ describe("handleUserMessage", () => {
       executeToolCall
     });
 
-    expect(result).toEqual({ kind: "success", text: "after retry" });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected success result");
+    }
+    expect(result.text).toBe("after retry");
+    expectMeta(result.meta);
     expect(chat).toHaveBeenCalledTimes(2);
   });
 
@@ -185,7 +216,12 @@ describe("handleUserMessage", () => {
       executeToolCall
     });
 
-    expect(result).toEqual({ kind: "success", text: "tool done" });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected success result");
+    }
+    expect(result.text).toBe("tool done");
+    expectMeta(result.meta);
     expect(executeToolCall).toHaveBeenCalledTimes(2);
   });
 
@@ -226,7 +262,12 @@ describe("handleUserMessage", () => {
       executeToolCall
     });
 
-    expect(result).toEqual({ kind: "success", text: "fallback response" });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      throw new Error("Expected success result");
+    }
+    expect(result.text).toBe("fallback response");
+    expectMeta(result.meta);
     expect(executeToolCall).toHaveBeenCalledTimes(5);
     expect(chat).toHaveBeenCalledTimes(7);
   });
@@ -248,6 +289,11 @@ describe("handleUserMessage", () => {
       executeToolCall
     });
 
-    expect(result).toEqual({ kind: "error", text: "network failure" });
+    expect(result.kind).toBe("error");
+    if (result.kind !== "error") {
+      throw new Error("Expected error result");
+    }
+    expect(result.text).toBe("network failure");
+    expectMeta(result.meta);
   });
 });

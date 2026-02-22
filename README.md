@@ -23,6 +23,7 @@ Type `exit` or `quit` to stop.
 ## Scripts
 
 - `npm run dev` - start local REPL
+- `npm run db:migrate` - ensure local SQLite schema
 - `npm run typecheck` - TypeScript check
 - `npm run lint` - ESLint
 - `npm run test` - unit tests

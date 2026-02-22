@@ -13,10 +13,12 @@ export type AgentTurnResult =
   | {
       kind: "success";
       text: string;
+      meta: AgentTurnMeta;
     }
   | {
       kind: "error";
       text: string;
+      meta: AgentTurnMeta;
     };
 
 export type ToolExecutor = (toolCall: ToolCall) => Promise<ToolExecutionEnvelope>;
@@ -39,6 +41,7 @@ type HandleUserMessageParams = {
   requestId: string;
   tools: Tool[];
   executeToolCall: ToolExecutor;
+  onToolResult?: OnToolResult;
 };
 
 type ChatAttemptResult = {
@@ -59,6 +62,12 @@ type TurnStats = {
   toolRetries: number;
   toolErrors: number;
 };
+
+export type AgentTurnMeta = TurnStats & {
+  durationMs: number;
+};
+
+type OnToolResult = (toolCall: ToolCall, envelope: ToolExecutionEnvelope) => Promise<void>;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -118,6 +127,17 @@ function logTurnCompletion(
   });
 }
 
+function toTurnMeta(durationMs: number, stats: TurnStats): AgentTurnMeta {
+  return {
+    durationMs,
+    modelCalls: stats.modelCalls,
+    modelRetries: stats.modelRetries,
+    toolCalls: stats.toolCalls,
+    toolRetries: stats.toolRetries,
+    toolErrors: stats.toolErrors
+  };
+}
+
 function buildSuccessTurnResult(
   logger: Logger,
   requestId: string,
@@ -125,8 +145,9 @@ function buildSuccessTurnResult(
   stats: TurnStats,
   text: string
 ): AgentTurnResult {
-  logTurnCompletion(logger, requestId, "success", Date.now() - startedAt, stats);
-  return { kind: "success", text };
+  const durationMs = Date.now() - startedAt;
+  logTurnCompletion(logger, requestId, "success", durationMs, stats);
+  return { kind: "success", text, meta: toTurnMeta(durationMs, stats) };
 }
 
 function buildErrorTurnResult(
@@ -137,8 +158,9 @@ function buildErrorTurnResult(
   error: unknown
 ): AgentTurnResult {
   const message = getErrorMessage(error);
-  logTurnCompletion(logger, requestId, "error", Date.now() - startedAt, stats, message);
-  return { kind: "error", text: message };
+  const durationMs = Date.now() - startedAt;
+  logTurnCompletion(logger, requestId, "error", durationMs, stats, message);
+  return { kind: "error", text: message, meta: toTurnMeta(durationMs, stats) };
 }
 
 async function chatWithRetry(
@@ -215,7 +237,8 @@ export async function handleUserMessage({
   userInput,
   requestId,
   tools,
-  executeToolCall
+  executeToolCall,
+  onToolResult
 }: HandleUserMessageParams): Promise<AgentTurnResult> {
   const startedAt = Date.now();
   const stats = createTurnStats();
@@ -242,6 +265,10 @@ export async function handleUserMessage({
         const toolAttempt = await executeToolCallWithRetry(executeToolCall, logger, requestId, toolCall);
         trackToolAttempt(stats, toolAttempt);
         appendToolResultMessage(history, toolCall, toolAttempt.envelope);
+
+        if (onToolResult) {
+          await onToolResult(toolCall, toolAttempt.envelope);
+        }
       }
 
       chatResult = await chatWithRetry(client, logger, requestId, model, history, tools);

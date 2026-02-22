@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "debug:runs": "tsx src/scripts/recentRuns.ts",
+    "db:migrate": "tsx src/scripts/migrate.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -15,7 +16,9 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "better-sqlite3": "^11.8.1",
     "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.44.5",
     "execa": "^9.6.0",
     "ollama": "^0.5.17",
     "pino": "^9.6.0",
@@ -27,6 +30,7 @@
     "eslint": "^9.19.0",
     "globals": "^15.14.0",
     "husky": "^9.1.7",
+    "@types/better-sqlite3": "^7.6.12",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.22.0",
