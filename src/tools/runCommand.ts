@@ -33,6 +33,34 @@ export type RunCommandResult = {
   error?: string;
 };
 
+type RunCommandResultBase = Omit<RunCommandResult, "ok" | "error">;
+
+type BuildRunCommandResultInput = {
+  ok: boolean;
+  error?: string;
+} & Partial<RunCommandResultBase>;
+
+const defaultRunCommandResultBase: RunCommandResultBase = {
+  command: "",
+  exitCode: null,
+  stdout: "",
+  stderr: "",
+  timedOut: false,
+  durationMs: 0,
+  truncated: false
+};
+
+function buildRunCommandResult(input: BuildRunCommandResultInput): RunCommandResult {
+  const { ok, error, ...baseOverrides } = input;
+
+  return {
+    ok,
+    ...defaultRunCommandResultBase,
+    ...baseOverrides,
+    ...(error === undefined ? {} : { error })
+  };
+}
+
 export const runCommandTool: Tool = {
   type: "function",
   function: {
@@ -80,7 +108,7 @@ async function executeRunCommand(inputData: RunCommandInput): Promise<RunCommand
     const cappedStdout = truncateText(commandResult.stdout ?? "", DEFAULT_MAX_TEXT_CHARS);
     const cappedStderr = truncateText(commandResult.stderr ?? "", DEFAULT_MAX_TEXT_CHARS);
 
-    return {
+    return buildRunCommandResult({
       ok: commandResult.exitCode === 0,
       command: inputData.command,
       exitCode: commandResult.exitCode ?? null,
@@ -89,51 +117,32 @@ async function executeRunCommand(inputData: RunCommandInput): Promise<RunCommand
       timedOut: Boolean(commandResult.timedOut),
       durationMs: Date.now() - startedAt,
       truncated: cappedStdout.truncated || cappedStderr.truncated
-    };
+    });
   } catch (error) {
-    return {
+    return buildRunCommandResult({
       ok: false,
       command: inputData.command,
-      exitCode: null,
-      stdout: "",
-      stderr: "",
-      timedOut: false,
       durationMs: Date.now() - startedAt,
-      truncated: false,
       error: getErrorMessage(error)
-    };
+    });
   }
 }
 
 export async function executeRunCommandToolCall(toolCall: ToolCall): Promise<RunCommandResult> {
   if (toolCall.function.name !== RUN_COMMAND_TOOL_NAME) {
-    return {
+    return buildRunCommandResult({
       ok: false,
-      command: "",
-      exitCode: null,
-      stdout: "",
-      stderr: "",
-      timedOut: false,
-      durationMs: 0,
-      truncated: false,
       error: `Unsupported tool: ${toolCall.function.name}`
-    };
+    });
   }
 
   try {
     const inputData = parseRunCommandInput(toolCall);
     return await executeRunCommand(inputData);
   } catch (error) {
-    return {
+    return buildRunCommandResult({
       ok: false,
-      command: "",
-      exitCode: null,
-      stdout: "",
-      stderr: "",
-      timedOut: false,
-      durationMs: 0,
-      truncated: false,
       error: getErrorMessage(error)
-    };
+    });
   }
 }
