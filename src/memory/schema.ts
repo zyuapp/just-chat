@@ -96,11 +96,32 @@ export const memoryChunksTable = sqliteTable(
   })
 );
 
+export const factsTable = sqliteTable(
+  "facts",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id").notNull(),
+    factKey: text("fact_key").notNull(),
+    value: text("value").notNull(),
+    valueNormalized: text("value_normalized").notNull(),
+    confidence: integer("confidence").notNull(),
+    sourceRequestId: text("source_request_id").notNull(),
+    sourceExcerpt: text("source_excerpt").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull()
+  },
+  (table) => ({
+    conversationKeyIdx: uniqueIndex("facts_conversation_key_idx").on(table.conversationId, table.factKey),
+    conversationTimeIdx: index("facts_conversation_time_idx").on(table.conversationId, table.updatedAt)
+  })
+);
+
 export const memorySchema = {
   conversationsTable,
   messagesTable,
   toolRunsTable,
   agentRunsTable,
   settingsTable,
-  memoryChunksTable
+  memoryChunksTable,
+  factsTable
 };

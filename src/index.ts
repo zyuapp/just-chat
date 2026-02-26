@@ -7,6 +7,8 @@ import { createInitialHistory } from "./agent/history.js";
 import { handleUserMessage } from "./agent/loop.js";
 import { getEnv } from "./config/env.js";
 import type { AppEnv } from "./config/env.js";
+import { extractFactCandidates } from "./memory/facts-extractor.js";
+import { createFactsStore } from "./memory/facts-store.js";
 import { createRagMemory } from "./memory/rag.js";
 import type { MemoryStore } from "./memory/store.js";
 import { createMemoryStore } from "./memory/store.js";
@@ -85,9 +87,19 @@ function persistRunMetrics(
   });
 }
 
+function combineContextNotes(notes: Array<string | null>): string | undefined {
+  const nonEmpty = notes.filter((note): note is string => note !== null && note.trim().length > 0);
+  if (nonEmpty.length === 0) {
+    return undefined;
+  }
+
+  return nonEmpty.join("\n\n");
+}
+
 function createTurnHandler(
   client: Ollama,
   memory: MemoryStore,
+  factsStore: ReturnType<typeof createFactsStore>,
   ragMemory: ReturnType<typeof createRagMemory>,
   conversationId: string,
   history: ReturnType<typeof createInitialHistory>,
@@ -95,7 +107,8 @@ function createTurnHandler(
 ) {
   return async (userInput: string): Promise<AgentTurnResult> => {
     const requestId = randomUUID();
-    const contextNote = await ragMemory.retrieveContext(conversationId, userInput);
+    const factsContext = factsStore.formatFactsContext(factsStore.getRelevantFacts(conversationId, userInput));
+    const ragContext = await ragMemory.retrieveContext(conversationId, userInput);
 
     memory.saveMessage({
       conversationId,
@@ -103,6 +116,12 @@ function createTurnHandler(
       role: "user",
       content: userInput
     });
+
+    const factCandidates = extractFactCandidates(userInput);
+    if (factCandidates.length > 0) {
+      factsStore.upsertFacts(conversationId, requestId, factCandidates);
+    }
+
     await ragMemory.ingestMessage({
       conversationId,
       requestId,
@@ -117,7 +136,7 @@ function createTurnHandler(
       history,
       userInput,
       requestId,
-      contextNote: contextNote ?? undefined,
+      contextNote: combineContextNotes([factsContext, ragContext]),
       tools: allTools,
       executeToolCall,
       onToolResult: async (toolCall, envelope) => {
@@ -142,6 +161,7 @@ async function main(): Promise<void> {
   const env = getEnv();
   const client = createOllamaClient(env);
   const memory = createMemoryStore();
+  const factsStore = createFactsStore();
   const ragMemory = createRagMemory({
     memory,
     embedClient: client,
@@ -154,9 +174,18 @@ async function main(): Promise<void> {
 
   try {
     await runRepl({
-      onUserMessage: createTurnHandler(client, memory, ragMemory, conversationId, history, env.OLLAMA_MODEL)
+      onUserMessage: createTurnHandler(
+        client,
+        memory,
+        factsStore,
+        ragMemory,
+        conversationId,
+        history,
+        env.OLLAMA_MODEL
+      )
     });
   } finally {
+    factsStore.close();
     memory.close();
   }
 }

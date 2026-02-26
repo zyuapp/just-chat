@@ -30,5 +30,6 @@ Type `exit` or `quit` to stop.
 - `npm run test` - unit tests
 - `npm run debug:runs -- 10` - show recent run summaries from logs
 - `npm run debug:memory -- "query"` - inspect semantic memory hits
+- `npm run debug:facts -- "query"` - inspect durable facts hits
 - `npm run eval:memory` - run a basic RAG memory evaluation
 - `npm run build` - compile to `dist/`

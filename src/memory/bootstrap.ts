@@ -62,7 +62,21 @@ const schemaStatements = [
     embedding_json TEXT NOT NULL,
     created_at INTEGER NOT NULL
   )`,
-  "CREATE INDEX IF NOT EXISTS memory_chunks_conversation_time_idx ON memory_chunks(conversation_id, created_at)"
+  "CREATE INDEX IF NOT EXISTS memory_chunks_conversation_time_idx ON memory_chunks(conversation_id, created_at)",
+  `CREATE TABLE IF NOT EXISTS facts (
+    id TEXT PRIMARY KEY NOT NULL,
+    conversation_id TEXT NOT NULL,
+    fact_key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    value_normalized TEXT NOT NULL,
+    confidence INTEGER NOT NULL,
+    source_request_id TEXT NOT NULL,
+    source_excerpt TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS facts_conversation_key_idx ON facts(conversation_id, fact_key)",
+  "CREATE INDEX IF NOT EXISTS facts_conversation_time_idx ON facts(conversation_id, updated_at)"
 ];
 
 export function ensureDatabaseSchema(database: Database.Database): void {
